@@ -62,6 +62,15 @@ end
 class Cons
   attr_reader :car, :cdr
 
+  # なぜか sample になかったので追加
+  def self.from_a(args)
+    # ARGSからリストを作る
+    head, *tail = args
+    return :nil unless head
+    new(head, from_a(tail))
+    # p Cons.from_a([1, 2, 3]) # => #<Cons:0x000055866c6965c0 @car=1, @cdr=#<Cons:0x000055866c696610 @car=2, @cdr=#<Cons:0x000055866c696660 @car=3, @cdr=:nil>>>
+  end
+
   def initialize(car, cdr)
     @car, @cdr = car, cdr
   end
@@ -201,7 +210,24 @@ FORMS = {
   :lambda => lambda { |env, forms, params, *code|
     Lambda.new(env, forms, params, *code)
   },
- }
+  :let1 => lambda { |env, forms, binding, body|
+    Lambda.new(env, forms, [binding.car], body).call(binding.cdr.car.lispeval(env, forms))
+  },
+  # (let1 ((a 5) (- a 1))) ;=> 4
+
+  :defmacro => lambda { |env, forms, name, exp|
+    func = exp.lispeval(env, forms)
+    forms.define(name, lambda{ |env2, forms2, *rest| func.call(*rest).lispeval(env, forms) })
+    name
+  },
+  # (defmacro let1 (lambda (binding body) (list (list (quote lambda) (list (car binding)) body) (car (cdr binding)))))
+  # (defmacro unless (lambda (cond then else) (list (quote if) cond else then)))
+
+  :eval => lambda { |env, forms, *code|
+    code.map{ |c| c.lispeval(env, forms)}.map{ |c| c.lispeval(env, forms) }.last
+  },
+  # (eval (quote (+ 1 2))) => 3
+}
 
 class Interpreter
   def initialize(defaults=DEFAULTS, forms=FORMS)
