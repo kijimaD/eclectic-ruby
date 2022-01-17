@@ -1,4 +1,17 @@
 require 'sexp'
+# 依存gemの`rparsec`のコードでsyntaxエラーになってるので修正が必要。syntaxエラーだからオーバーライド不可
+# (parser.rb のas_numメソッド)
+
+# class RParsec::Parser
+#   def as_num c
+#     case c
+#     when String
+#       c[0]
+#     else
+#       c
+#     end
+#   end
+# end
 
 class Env
   def initialize(parent=nil, defaults={})
@@ -58,10 +71,10 @@ class Cons
   # p d.cdr.cdr.car
 
   def lispeval(env, forms)
-    return forms.lookup(car).call(env, forms, *cdr.arrayify) if forms&.defined?(car)
+    return forms.lookup(car).call(env, forms, *cdr.arrayify) if forms.defined?(car)
     func = car.lispeval(env, forms)
 
-    return func unless func.class == Proc # MEMO: 3.call として失敗してたので修正
+    return func unless func.class == Proc # MEMO: 3.call として失敗するため
     return func.call(*cdr.arrayify.map{ |x| x.lispeval(env, forms) })
   end
   # env = Env.new(nil, {:+ => lambda{ |x, y| x + y } })
@@ -74,6 +87,11 @@ class Cons
 
   def conslist?
     cdr.conslist?
+  end
+
+  def to_sexp
+    return "(cons #{car.to_sexp} #{cdr.to_sexp})" unless conslist?
+    return "(#{arrayify.map{ |x| x.to_sexp }.join(' ')})"
   end
 end
 
@@ -122,6 +140,96 @@ class Array
   end
 end
 
-# pp "(+ 1 2)".parse_sexp.consify
-# env = Env.new(nil, {:+ => lambda{ |x, y| x + y }})
-# p "(+ 1 2)".parse_sexp.consify.lispeval(env, nil)
+class Lambda
+  def initialize(env, forms, params, *code)
+    @env = env
+    @forms = forms
+    @params = params.arrayify
+    @code = code
+  end
+
+  def call(*args)
+    raise "Expected #{@params.size} arguments!" unless args.size == @params.size
+    newenv = Env.new(@env)
+    @params.zip(args).each do |sym, value|
+      newenv.define(sym, value)
+    end
+    @code.map{ |c| c.lispeval(newenv, @forms) }.last
+  end
+  # l = Lambda.new(Env.new, Env.new, :nil, 1.0)
+  # p l.call # 1.0
+
+  def to_sexp
+    "(lambda #{@params.to_sexp} #{@code.map{ |x| x.to_sexp }.join(' ')}"
+  end
+  # l = Lambda.new(Env.new, Env.new, :nil, 1.0)
+  # p l.to_sexp # "(lambda () 1.0"
+end
+
+DEFAULTS = {
+  :nil => :nil,
+  :t => :t,
+  :+ => lambda { |x, y| x + y },
+  :- => lambda { |x, y| x - y },
+  :* => lambda { |x, y| x * y },
+  :/ => lambda { |x, y| x / y },
+  :car => lambda { |x| x.car },
+  :cdr => lambda { |x| x.cdr },
+  :cons => lambda { |x, y| Cons.new(x, y) },
+  :atom? => lambda { |x| x.kind_of?(Cons) ? :nil : :t },
+  :eq? => lambda { |x, y| x.equal?(y) ? :t : :nil },
+  :list => lambda { |*args| Cons.from_a(args)},
+  :print => lambda { |*args| puts *args; :nil },
+}
+
+# 特殊な引数の順番、評価しないことが必要なためのspecial form
+FORMS = {
+  :quote => lambda { |env, forms, exp| exp }, # 評価せず返す
+  :define => lambda { |env, forms, sym, value|
+    env.define(sym, value.lispeval(env, forms))
+  },
+  :set! => lambda { |env, forms, sym, value|
+    env.set(sym, value.lispeval(env, forms))
+  },
+  :if => lambda { |env, forms, cond, xthen, xelse|
+    if cond.lispeval(env, forms) != :nil
+      xthen.lispeval(env, forms)
+    else
+      xelse.lispeval(env, forms)
+    end
+  },
+  :lambda => lambda { |env, forms, params, *code|
+    Lambda.new(env, forms, params, *code)
+  },
+ }
+
+class Interpreter
+  def initialize(defaults=DEFAULTS, forms=FORMS)
+    @env = Env.new(nil, defaults)
+    @forms = Env.new(nil, forms)
+  end
+
+  def eval(string)
+    exps = "(#{string})".parse_sexp
+    exps.map do |exp|
+      exp.consify.lispeval(@env, @forms)
+    end.last
+  end
+  # lisp = Interpreter.new
+  # p lisp.eval("(+ 1 2)")
+
+  def repl
+    print "> "
+    STDIN.each_line do |line|
+      begin
+        puts self.eval(line).to_sexp
+      rescue StandardError => e
+        puts "ERROR: #{e}"
+      end
+      print "> "
+    end
+  end
+  # Interpreter.new.repl
+end
+
+Interpreter.new.repl
