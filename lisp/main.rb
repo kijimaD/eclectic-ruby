@@ -160,10 +160,11 @@ class Lambda
   def call(*args)
     raise "Expected #{@params.size} arguments!" unless args.size == @params.size
     newenv = Env.new(@env)
+    newforms = Env.new(@forms)
     @params.zip(args).each do |sym, value|
       newenv.define(sym, value)
     end
-    @code.map{ |c| c.lispeval(newenv, @forms) }.last
+    @code.map{ |c| c.lispeval(newenv, newforms) }.last
   end
   # l = Lambda.new(Env.new, Env.new, :nil, 1.0)
   # p l.call # 1.0
@@ -227,6 +228,16 @@ FORMS = {
     code.map{ |c| c.lispeval(env, forms)}.map{ |c| c.lispeval(env, forms) }.last
   },
   # (eval (quote (+ 1 2))) => 3
+
+  :letmacro => lambda { |env, forms, binding, body|
+    name = binding.car
+    func = binding.cdr.car.lispeval(env, forms)
+    newforms = Env.new(forms)
+    newforms.define(name, lambda{ |env2, form2, *rest| func.call(*rest).lispeval(env, forms)})
+    body.lispeval(env, newforms)
+  },
+  # (letmacro (myquote (lambda (thing) (list (quote quote) thing))) (myquote b))
+  # (myquote b) ; ERROR: No value for symbol myquote. =>  So, lexical macro!
 }
 
 class Interpreter
