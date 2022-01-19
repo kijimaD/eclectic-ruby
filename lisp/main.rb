@@ -84,7 +84,12 @@ class Cons
     func = car.lispeval(env, forms)
 
     return func unless func.class == Proc # MEMO: 3.call として失敗するため
-    return func.call(*cdr.arrayify.map{ |x| x.lispeval(env, forms) })
+    return func.call(*cdr.arrayify.map do |x|
+                       result = x.lispeval(env, forms)
+                       result = eval(result).join if result.class == String
+                       result
+                     end)
+    # MEMO: "111" が "[\"1\", \"1\", \"1\"]" になるのを防ぐため、パース直後に"[...]"を除去している。
   end
   # env = Env.new(nil, {:+ => lambda{ |x, y| x + y } })
   # p Cons.new(:+, Cons.new(1, Cons.new(2, :nil))).lispeval(env, nil)
@@ -248,7 +253,10 @@ FORMS = {
   },
 
   :"!" => lambda { |env, forms, object, message, *params|
-    evaled_params = params.map{ |p| p.lispeval(env, forms).arrayify }
+    evaled_params = params.map do |p|
+      result = p.lispeval(env, forms).arrayify
+      eval(result).join if result.class == String
+    end
     proc = nil
     proc = evaled_params.pop if evaled_params.last.kind_of?(Lambda) # 最後の引数がlambdaならブロックスロットに入る。
     object.lispeval(env, forms).send(message, *evaled_params, &proc).consify
@@ -256,6 +264,8 @@ FORMS = {
   # (define f (! (ruby File) open "lisp.rb"))
   # (define lines (! f readlines))
   # (! f close)
+
+  # (! (ruby Kernel) puts "aaa")
 }
 
 class Interpreter
@@ -270,8 +280,6 @@ class Interpreter
     # => 122 だが、
     # "\"122\"".parse_sexp
     # => ["[\"1\", \"2\", \"2\"]"] となる。
-    # string.gsub!(/^\"/, '')
-    # string.gsub!(/\"$/, '')
     exps = "(#{string})".parse_sexp
     exps.map do |exp|
       exp.consify.lispeval(@env, @forms)
@@ -295,6 +303,6 @@ class Interpreter
 end
 
 # lisp = Interpreter.new
-# p lisp.eval('(list "122" "111" "aaa")')
+# p lisp.eval('(list 122 "111" "aaa")')
 
-# Interpreter.new.repl
+Interpreter.new.repl
