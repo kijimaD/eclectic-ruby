@@ -238,6 +238,18 @@ FORMS = {
   },
   # (letmacro (myquote (lambda (thing) (list (quote quote) thing))) (myquote b))
   # (myquote b) ; ERROR: No value for symbol myquote. =>  So, lexical macro!
+
+  :ruby => lambda { |env, forms, name|
+    Kernel.const_get(name)
+  },
+
+  :"!" => lambda { |env, forms, object, message, *params|
+  puts params
+    object.lispeval(env, forms).send(message, *params.map{ |p| p.lispeval(env, forms).arrayify }).consify
+  }, # FIXME: not working ... params => ["[\"l\", \"i\", \"s\", \"p\", \".\", \"r\", \"b\"]"]
+  # (define f (! (ruby File) open "lisp.rb"))
+  # (define lines (! f readlines))
+  # (! f close)
 }
 
 class Interpreter
@@ -247,6 +259,13 @@ class Interpreter
   end
 
   def eval(string)
+    # 文字列のときの扱いがおかしい。
+    # "122".parse_sexp
+    # => 122 だが、
+    # "\"122\"".parse_sexp
+    # => ["[\"1\", \"2\", \"2\"]"] となる。
+    # string.gsub!(/^\"/, '')
+    # string.gsub!(/\"$/, '')
     exps = "(#{string})".parse_sexp
     exps.map do |exp|
       exp.consify.lispeval(@env, @forms)
@@ -269,4 +288,7 @@ class Interpreter
   # Interpreter.new.repl
 end
 
-Interpreter.new.repl
+# lisp = Interpreter.new
+# p lisp.eval('(list "122" "111" "aaa")')
+
+# Interpreter.new.repl
