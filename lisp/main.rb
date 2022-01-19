@@ -174,6 +174,10 @@ class Lambda
   end
   # l = Lambda.new(Env.new, Env.new, :nil, 1.0)
   # p l.to_sexp # "(lambda () 1.0"
+
+  def to_proc
+    return lambda{ |*args| self.call(:args) }
+  end
 end
 
 DEFAULTS = {
@@ -244,8 +248,10 @@ FORMS = {
   },
 
   :"!" => lambda { |env, forms, object, message, *params|
-  puts params
-    object.lispeval(env, forms).send(message, *params.map{ |p| p.lispeval(env, forms).arrayify }).consify
+    evaled_params = params.map{ |p| p.lispeval(env, forms).arrayify }
+    proc = nil
+    proc = evaled_params.pop if evaled_params.last.kind_of?(Lambda) # 最後の引数がlambdaならブロックスロットに入る。
+    object.lispeval(env, forms).send(message, *evaled_params, &proc).consify
   }, # FIXME: not working ... params => ["[\"l\", \"i\", \"s\", \"p\", \".\", \"r\", \"b\"]"]
   # (define f (! (ruby File) open "lisp.rb"))
   # (define lines (! f readlines))
