@@ -220,6 +220,16 @@ FORMS = {
   :lambda => lambda { |env, forms, params, *code|
     Lambda.new(env, forms, params, *code)
   },
+  :funcall => lambda { |env, forms, exp, params|
+    body = exp.lispeval(env, forms)
+    if params == :nil
+      body.call
+    else
+      body.call(*params.arrayify)
+    end
+  },
+  # (define plus (lambda (x) (+ x 2))) (funcall plus (2))
+
   :let1 => lambda { |env, forms, binding, body|
     Lambda.new(env, forms, [binding.car], body).call(binding.cdr.car.lispeval(env, forms))
   },
