@@ -1,4 +1,5 @@
 require 'sexp'
+# RubyコードをS式にparseするgem
 # 依存gemの`rparsec`のコードでsyntaxエラーになってるので修正が必要。syntaxエラーだからオーバーライド不可
 # (parser.rb のas_numメソッド)
 
@@ -233,7 +234,7 @@ FORMS = {
   :let1 => lambda { |env, forms, binding, body|
     Lambda.new(env, forms, [binding.car], body).call(binding.cdr.car.lispeval(env, forms))
   },
-  # (let1 ((a 5) (- a 1))) ;=> 4
+  # (let1 (a 4) (+ a 1)) ;=> 4
 
   :defmacro => lambda { |env, forms, name, exp|
     func = exp.lispeval(env, forms)
@@ -316,3 +317,29 @@ end
 # p lisp.eval('(list 122 "111" "aaa")')
 
 Interpreter.new.repl
+
+# 目標(Emacs Lispでの例)
+
+# (setq lexical-binding t)
+
+# (defun omikuji (kujis)
+#   (let* ((kujis kujis)
+#          (pull-func (lambda () (cdr (pop kujis))))
+#          (shuffle-func (lambda () (setq kujis nil))))
+#     (lambda (type)
+#       (cond ((eq type 'pull) (funcall pull-func))
+#             ((eq type 'shuffle) (funcall shuffle-func))))))
+
+# (defun make-ji (num key name)
+#   (make-list num `(,key  . ,name)))
+# (make-ji 10 'daikiti "大吉")
+
+# (setq kuji2022
+#       (omikuji (append (make-ji 10 'daikiti  "大吉")
+#                        (make-ji 20 'syokichi "中吉")
+#                        (make-ji 30 'syokichi "小吉")
+#                        (make-ji 30 'suekichi "末吉")
+#                        (make-ji 10 'kyo      "凶"))))
+
+# (funcall kuji2022 'shuffle)
+# (funcall kuji2022 'pull)
