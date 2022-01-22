@@ -1,3 +1,4 @@
+require 'pry-byebug'
 require 'sexp'
 # RubyコードをS式にparseするgem
 # 依存gemの`rparsec`のコードでsyntaxエラーになってるので修正が必要。syntaxエラーだからオーバーライド不可
@@ -150,6 +151,7 @@ class Symbol
 end
 
 class Array
+  # パースしたS式が配列で返ってくるので、Consオブジェクトに変換する。
   def consify
     map{ |x| x.consify }.reverse.inject(:nil) { |cdr, car| Cons.new(car, cdr) }
   end
@@ -221,6 +223,8 @@ FORMS = {
   :lambda => lambda { |env, forms, params, *code|
     Lambda.new(env, forms, params, *code)
   },
+
+  # FIXME: ネストすると動かない
   :funcall => lambda { |env, forms, exp, params|
     body = exp.lispeval(env, forms)
     if params == :nil
@@ -313,10 +317,23 @@ class Interpreter
   # Interpreter.new.repl
 end
 
-# lisp = Interpreter.new
 # p lisp.eval('(list 122 "111" "aaa")')
 
-Interpreter.new.repl
+code = <<EOF
+  (define omikuji (lambda (kujis)
+  (let1 (pull-func (lambda () (pop kujis)))
+  (let1 (shuffle-func (lambda () (set! kujis 0)))
+    (lambda (type)
+      (if (eq? type (quote pull)) (funcall pull-func))
+      (if (eq? type (quote shuffle)) (funcall shuffle-func)))))))
+EOF
+lisp = Interpreter.new
+lisp.eval(code)
+lisp.repl
+
+# (funcall (funcall omikuji (quote 1 2 3)) (quote pull))
+
+# Interpreter.new.repl
 
 # 目標(Emacs Lispでの例)
 
